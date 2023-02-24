@@ -9,7 +9,6 @@ import os
 import shutil
 import numpy as np
 import math
-import subprocess
 
 # User Input prompts
 molecule_name = input('Molecule Name: ')
@@ -34,9 +33,7 @@ if spectroscopy == 'ROA':
 
 cwd = os.getcwd()
 
-#_____________________________________________________________
-# ==> Generate Data for Single Snapshot from MD Trajectory <==
-#_____________________________________________________________
+#Generating Data for Single Snapshot from MD trajectory
 
 # Read the number of frames in the MD trajectory.
 
@@ -47,7 +44,7 @@ with open(f"{molecule_name}_MD.arc", "r") as f:
     
     
 
-frames = (lines // (atoms + 2))
+frames = (lines // (atoms + 2))  #2 extra to account for GROMACS separator and box dimensions
 print(f"Frames: {frames}")
 print()
 
@@ -57,24 +54,18 @@ counter = 1
 for snap in range(flag, frames+flag, flag):
     print(f"Obtaining coordinate information for frame {snap}.")
     ends = snap * (atoms + 2) - 1
-    #print(ends)
     begins = ends - atoms -1
-    #print(begins)
     with open(f"cmpd_{counter}", "w") as out:
         with open(f"{molecule_name}_MD.arc", "r") as inp:
-            for i, line in enumerate(inp): #sed command in bash
+            for i, line in enumerate(inp): #sed with p,q command in bash
                 if i >= begins and i <= ends:
                     out.write(line)
                 elif i > ends:
                     break
     counter += 1
-        #A_glucosecounter += 1
 print()
 
-#__________________________________________________________________________________
-# ==> Generate Directories and Modify SLURM Submission and Gaussian Input Files <==
-#__________________________________________________________________________________
-
+#Generating Directories and Modifying SLURM submission and Gaussian Input files
 
 os.mkdir(f"{molecule_name}_MD")
 print("Generating directory structure and modifying input and submission files.")
@@ -82,7 +73,6 @@ os.chdir(f"{molecule_name}_MD")
 
 conformer_count = 1
 while conformer_count <= snapshots:
-    #os.chdir(cwd)
 
     # Makes the directory for a specific conformer.
     os.mkdir(f"cmpd_{conformer_count}")
@@ -106,40 +96,26 @@ while conformer_count <= snapshots:
         file.write(content)
         file.truncate()
 
-    #os.chdir(cwd)
     conformer_count += 1
 
 print()
 os.chdir(cwd)
 
-
-#_____________________________________________________________________
-# ==> Modify Snapshots to Include Only Specified Solvent Molecules <==
-#_____________________________________________________________________
+#Modifying Snapshots to include only specified solvent molecules
 
 print("Generating data for Gaussian input file.")
 
-#___________________________
-# ==> Initial Parameters <==
-#___________________________
+#Initial params
 
 # Set solvent atom types.
 O=349
 H=350
 
-#_____________________________
-# ==> Loop Over Compounds  <==
-#_____________________________
-
 # Set the file to be read.
 for index in range(1, snapshots+1):
     file=f"cmpd_{index}"
     print(f"Compound {index}")
-
-    #________________________________________________
-    # ==> Setup Solute, Solvent, and Total Arrays <==
-    #________________________________________________
-
+    
     # Initializing atom number, atom symbol, X, Y, Z, and atom type arrays for all atoms.
     atom_number=[]
     atom_sym=[]
@@ -151,10 +127,8 @@ for index in range(1, snapshots+1):
     # Reads the lines in the file and appends to the arrays.
     with open(file, 'r') as f:
         lines = f.readlines()
-        #print(os.getcwd())
         for line in lines[2:len(lines)]: #skipping the first two lines
             temp = line.split()  #goes through each field/column in a line
-            #print(temp)
             atom_number.append(int(temp[0]))
             atom_sym.append(temp[1])
             X.append(float(temp[2]))
@@ -192,15 +166,11 @@ for index in range(1, snapshots+1):
             solvent_Z.append(Z[i])
     print(f'Number of Solute Atoms: {len(solute_number)}')
 
-    # ___________________________________________
-    # ==> Center Solvent Atoms Around Solute <==
-    # ___________________________________________
+    #Centering solvent atoms around the solute
 
     # Read the size of the box in the X, Y, and Z dimensions.
     box = np.genfromtxt(file, skip_header=1, max_rows=1)
-    # with open(f"cmpd_{index}") as f:
-    #     box = f.readlines()
-    #     sp_box = box.split()
+  
     box_X = float(box[0]) #x-coordinate from the file
     box_Y = float(box[1]) #y-coordinate from the file
     box_Z = float(box[2]) #z-coordinate from the file
@@ -226,9 +196,7 @@ for index in range(1, snapshots+1):
             solvent_Z[a] += box_Z
  
     
-    #______________________________________________
-    # ==> Setup and Compute Intermediate Arrays <==
-    #______________________________________________
+    #Computing inetermediate arrays
     
     # Initialize intermediate solvent arrays for faster computation.
     int_number=[]
@@ -278,7 +246,6 @@ for index in range(1, snapshots+1):
     
     # Determines solvent molecules distance from solute atoms and appends.
     for j in range(len(solute_number)):
-        #if solute_sym[j] != 'H':
         for k in range(len(int_number)):
             d = math.sqrt((solute_X[j] - int_X[k])**2 + (solute_Y[j] - int_Y[k])**2 + (solute_Z[j] - int_Z[k])**2)
             if d <= float(D):
@@ -293,51 +260,41 @@ for index in range(1, snapshots+1):
                     final_X.append(int_X[k])
                     final_Y.append(int_Y[k])
                     final_Z.append(int_Z[k])
-                    #break - second step diff 18 instead of 14
 
-    
     print(f"Number of Atoms before Solvent Check: {len(final_number)}")
     
-    #_________________________________________________
-    # ==> Confirm Presence of Full Solvent Molecules <==
-    #_________________________________________________
-    
+    #Confirming the presence of full solvent molecules
     
     solvent_complete = False
     poorni = 0
 
     while not solvent_complete:
-        #print(os.getcwd())
         # Initializing solvent connectivity arrays.
         connect_1 = []
         connect_2 = []
         connect_3 = []
         connect_4 = []
         col = []
-        #columns = 0
     
-        #lb= [False, False, False, False]
-        l = [connect_1, connect_2, connect_3, connect_4]
+        l = [connect_1, connect_2, connect_3, connect_4] #list of connect lists for lesser code
     
         for p in range(len(final_number)):
             ln_num = final_number[p]
             with open(f"cmpd_{index}") as f:
-                #print("hi")
                 content = f.readlines()
                 for line in content:
                     splitted_line  = line.split()
                     if splitted_line[0] == str(ln_num) and splitted_line[1] != "Great": #string
                         columns = len(splitted_line)
-                        #break
+                        break
                 
-                        l[0].append(int(splitted_line[6]))
-                        l[1].append(0 if columns<8 else int(splitted_line[7]))
-                        l[2].append(0 if columns<9 else int(splitted_line[8]))
-                        l[3].append(0 if columns<10 else int(splitted_line[9]))
-                        col.append(columns) #moved thrice to right
+            l[0].append(int(splitted_line[6]))
+            l[1].append(0 if columns<8 else int(splitted_line[7]))
+            l[2].append(0 if columns<9 else int(splitted_line[8]))
+            l[3].append(0 if columns<10 else int(splitted_line[9]))
+            col.append(columns) 
                 
         # Initialize new atom array.
-    
         new_number = []
         
         #Checking status of atoms connectivity
@@ -347,7 +304,7 @@ for index in range(1, snapshots+1):
                 for y in range(4):
                     if l[y][q] == final_number[r]:
                         lb[y] = True
-                        break #doesn't matter
+                        break
                 for y in range(4):
                     if l[y][q] == 0:
                         if y<4:
@@ -358,21 +315,20 @@ for index in range(1, snapshots+1):
                             lb[y] = True
                         if y<1:
                             lb[y] = True
-                        #break
             for y in range(4):
                 if lb[y] == False:
                     no_duplicates = True
                     for t in range(len(new_number)):
                         if l[y][q] == new_number[t]:
                             no_duplicates = False
-                            #break #doesn't matter
+                            break
                     if no_duplicates:
                         new_number.append(l[y][q])
                         break
                 
         
             
-            # Checking if solvent is complete.
+        # Checking if solvent is complete.
         print("Number of New Atoms:", len(new_number))
         if len(new_number) == 0:
             print("Solvent Complete.")
@@ -381,8 +337,7 @@ for index in range(1, snapshots+1):
         else:
             print("Solvent Incomplete. Appending and obtaining connectivity of new atoms.")
     
-            # Appending new atoms to final atom arrays.
-        #print("hi")
+        # Appending new atoms to final atom arrays.
         for s in range(len(new_number)):
             ind = new_number[s] - len(solute_number) -1
             final_number.append(solvent_number[ind])
@@ -396,13 +351,9 @@ for index in range(1, snapshots+1):
     print("Final Number of Atoms:", len(final_number))
     print(" ")
     
-    #______________________________________________
-    # ==> Writing Gaussian Input Arrays to File <==
-    #______________________________________________
-    
-        # import os
-        # print("hi")
-        # Overwriting compound files with final data.
+    #Writing Gaussian Input Arrays to file
+      
+    # Overwriting compound files with final data.
     for i in range(len(final_number)):
         with open(os.path.join(cwd, f"{molecule_name}_MD", f"cmpd_{index}", "input.dat"), "a") as f:
             f.write("{:<2} \t {:<10} \t {:<10} \t {:<10}\n".format(final_sym[i], final_X[i], final_Y[i], final_Z[i]))
